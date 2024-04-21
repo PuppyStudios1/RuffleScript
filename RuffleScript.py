@@ -250,7 +250,7 @@ def evaluate_expression(node):
     elif callable(node.value):
         return node.value(evaluate_expression(node.left), evaluate_expression(node.right))
     else:
-        raise TypeError(f"{"{ RuntimeError:"} invalid node value: {node.value} {"}"}")
+        raise TypeError(f"{bbr}{Runtime_error} invalid node value: {node.value} {br}")
 
 def intr():
     interface_pattern = r"^interface\s+(.+?)\s*\{(.*?)\}\}$"

@@ -28,7 +28,6 @@ __version__ = "v1.6"
 
 import os,sys
 import operator,re
-import pandas as pd
 import asyncio
 import json
 import io as _io

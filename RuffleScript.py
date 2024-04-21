@@ -1176,10 +1176,12 @@ if __name__ == "__main__":
     elif sys.argv[1] == "--update":
          if platform.system == 'Windows':
               os.system('del "RuffleScript.py"')
+              os.system("cd /")
+              os.system("git clone https://github.com/PuppyStudios1/RuffleScript.git")
          else:
               os.system("sudo rm -rf RuffleScript.py")
-          os.system("cd /")
-          os.system("git clone https://github.com/PuppyStudios1/RuffleScript.git")
+              os.system("cd /")
+              os.system("git clone https://github.com/PuppyStudios1/RuffleScript.git")
          
     # else, rufflescript notebook
     else:

@@ -6,7 +6,9 @@ RuffleScript v1.6 interpreter
 
 `[!] notice: this interpreter is just a small project and sometimes unstable to use.`
 
-interprets lines of code given in the notebook, or given in a .rfs file
+interprets lines of code given in the notebook, or given in a .rfs file.
+(check build status if Your rufflescript version is stable)
+`[?] TIP: use a .rh (rufflescript header file) to make a package`
 ( for info on commands, type `help();` )
 
      ----------------------                             
@@ -20,27 +22,41 @@ interprets lines of code given in the notebook, or given in a .rfs file
      ---------------------       
     
 """
-__status__ = "unstable"
+__status__ = "experimental/unstable"
 __version__ = "v1.6"
+
 
 import os,sys
 import operator,re
 import pandas as pd
 import asyncio
 import json
+import io as _io
+import ast
+import platform
 
 global io
 global inp
 global g_variables
+global letvar
+global functions
 
 variables = {}
+functions = {}
+vartypes = {}
 g_variables = {}
 namespaces = {}
-types = {"bool":"bool","number":"number","string":"string"}
+types = {"bool":"bool","number":"number","string":"string","any":"any","null":"null"}
 
 inp = ""
+runtime_value = "{ RuntimeValue:"
+Runtime_error = "{ RuntimeError:"
+br = "}"
+bbr = "{"
+
 io = 0
 nb = 0
+line = 0
 rl = False
 rt = False
 
@@ -52,16 +68,27 @@ try:
         data = json.load(f)
 
     rl = data["RuntimeLineSuggestion"] == "on"
+    md = data["moduleRuntimeValue"] == "on"
+    verb = data["verbose"] == "true"
 
 except FileNotFoundError:
-    print("Error: rsconfig.json file not found")
+    print("{ ConfigError: rsconfig.json file not found }")
 except json.JSONDecodeError:
-    print("Error: Invalid JSON data in rsconfig.json")
+    print("{ ConfigError: Invalid JSON data in rsconfig.json }")
 except KeyError:
-    print("ConfigError: Missing RuntimeLineSuggestion key in JSON data")
+    pass
 else:
-    # Further processing with the parsed value of rl
+    # Further processing 
     if rl:
+        pass
+    else:
+        pass
+    
+    if md:
+        pass
+    else:
+        pass
+    if verb:
         pass
     else:
         pass
@@ -114,19 +141,18 @@ def ismath(text):
     else:
       # Any other character is invalid
       return False
-
-  # Ensure the expression ends with a number
-  return has_number
     
 def export(name, value):
     env = os.environ.copy()
     env[name] = str(value)  # Ensure value is a string for environment variable
     os.environ.update(env)
-    print("{ RuntimeValue: exported "+str(name)+" -> '"+str(value)+"' }")
+    if verb == True:
+        print("{ RuntimeValue: exported "+str(name)+" -> '"+str(value)+"' }")
+    else:
+        pass
     
 async def define_function(name, body):
   async def function():
-    # Execute the function body as asynchronous code
     main(body)
   return function
 
@@ -139,7 +165,7 @@ async def asyn(inp):
       # Extract function name
       function_name = inp.split()[2]
       function_body = []  # Reset function body
-      print(f"{"{ RuntimeValue:"} defining async function: {function_name} {"}"}")
+      print(f"{runtime_value} defining async function: {function_name} {br}")
     elif function_name:
       # Add lines to function body
       function_body.append(inp)
@@ -149,16 +175,16 @@ async def asyn(inp):
         async_function = await define_function(function_name, "\n".join(function_body))
         function_name = None
         function_body = []
-        print(f"{"{ RuntimeValue:"} async function '{function_name}' defined. {"}"}")
+        print(f"{runtime_value} async function '{function_name}' defined. {br}")
     else:
       # Execute simulation if a function is defined
       if async_function:
         try:
           # Call the simulated async function
           result = await async_function()
-          print(f"{"{ RuntimeValue:"}  created async function '{function_name}' returned: {result} {"}"}")
+          print(f"{runtime_value}  created async function '{function_name}' returned: {result} {br}")
         except Exception as e:
-          print(f"{"{ RuntimeError:"}: {e} {"}"}")
+          print(f"{Runtime_error}: {e} {br}")
 
 logo = """                    
      ----------------------                            
@@ -226,15 +252,12 @@ def evaluate_expression(node):
         raise TypeError(f"{"{ RuntimeError:"} invalid node value: {node.value} {"}"}")
 
 def intr():
-  # Regular expression to match interface name and lets block
-    pattern = r"^interface\s+(.+?)\s*\{(.*?)\}$"
-
-    # Validate the input format using regular expressions
-    match = re.match(pattern, inp)
-
-    if not match:
+    interface_pattern = r"^interface\s+(.+?)\s*\{(.*?)\}\}$"
+    match = re.search(interface_pattern, data, re.DOTALL)
+    if match:
+        return {"name": match.group(1), "body": match.group(2)}
+    else:
         print("{ RuntimeError: invalid format. Please use 'interface <name> {<lets>}' format. }")
-        
 
     interface_name = match.group(1)
     lets_block = match.group(2)
@@ -264,9 +287,12 @@ def intr():
             print("{ RuntimeError: Invalid value in 'let' inp: '"+str(let_inp)+"'. Skipping. }")
 
     # Print the final state of the interface
-    print("{ RuntimeValue: ",end="")
-    print(my_interface,end="")
-    print(" }")
+    if verb == True:
+        print("{ RuntimeValue: ",end="")
+        print(my_interface,end="")
+        print(" }")
+    else:
+        pass
 
 
 def Type(inp=""):
@@ -366,9 +392,12 @@ class namespaces:
             text_to_write = text_to_write.replace("'","")
             
             self.write(text_to_write)
-            return "{ RuntimeValue: wrote '"+str(text_to_write)+"' to the buffer in namespace '"+self.namespace_name+"' }"
+            if verb == True:
+                return "{ RuntimeValue: wrote '"+str(text_to_write)+"' to the buffer in namespace '"+self.namespace_name+"' }"
+            else:
+                pass
         else:
-            return "{ RuntimeValue: invalid input. Use 'getvalue()' or 'write (<text>)'. }"
+            return "{ RuntimeError: invalid input. Use 'getvalue()' or 'write (<text>)'. }"
     
 class IOBase:
     def __init__(self):
@@ -384,7 +413,10 @@ class IOBase:
             text = inp.replace('"',"")
             text = inp.replace("'","")
             self.write(text)
-            print("{ RuntimeValue: wrote text '"+text+"' to buffer }")
+            if verb == True:
+                print("{ RuntimeValue: wrote text '"+text+"' to buffer }")
+            else:
+                pass
         elif inp == "_io.IOBase.read();":
             print(self.read())
         elif inp == "_io.IOBase.clearBuffer();":
@@ -433,7 +465,7 @@ class BytesIO:
 def handle_input(inp):
     global current_namespace
 
-    match = re.match(r'_io\.namespace\((.*?)\) \| (.*)', inp)  # Updated regex for _io.namespace()
+    match = re.match(r'namespace\((.*?)\) \| (.*)', inp)  # Updated regex for namespace()
     if match:
         namespace_name, command = match.groups()
         if namespace_name not in namespaces:
@@ -447,7 +479,7 @@ def handle_input(inp):
             return current_namespace.handle_input(command)
 
     if current_namespace is None:
-        return "{ RuntimeError: no current namespace selected. Use '_io.namespace(<name>)' first. }"
+        return "{ RuntimeError: no current namespace selected. Use 'namespace(<name>)' first. }"
 
     if not command:
         return "{ RuntimeError: invalid input. Enter a command in the current namespace. }"
@@ -455,9 +487,8 @@ def handle_input(inp):
 
 
 def compare_expression(expression):
-
   try:
-    # Split the expression based on comparison operators
+    tree = ast.parse(expression)
     operators = ["==", "!=", "<", ">", "<=", ">="]
     for op in operators:
       if op in expression:
@@ -492,71 +523,6 @@ def compare_expression(expression):
     return False
 
 
-
-class let:
-    def __init__(self,typ,variable_name,variable_value):
-        self.typ = typ
-        self.variable_name = variable_name
-        self.variable_value = variable_value
-    
-    
-    def get_variable_name(self):
-        return self.variable_name
-    
-    def get_variable_value(self):
-        return self.variable_value
-    def get_type(self):
-        return self.variable_value
-        
-    def create():
-        if ";" not in inp:
-            print("{ RuntimeError: exected ';' at the end of line. }")
-        else:
-            pass
-        
-        if "->" in inp:
-            parts = inp.split("->")
-        elif ": " in inp:
-            parts = inp.split(":")
-            
-            for t in types:  
-                if t in inp:  
-                    typ = t 
-                    break 
-            else:
-                print("{ RuntimeError: dataType not found. }")
-                
-        if len(parts) != 2:
-            print("{ RuntimeError: invalid let declaration syntax. Use 'let <variable_name> -> <value>;' }")
-        else:
-            try:
-                variable_name = parts[0].strip().replace("let ", "")
-                variable_value = parts[1].strip().replace('"', "")
-                variable_value = parts[1].strip().replace("'", "")
-                variable_value = parts[1].strip().replace(';', "")
-                variables[variable_name]=variable_value
-                if variable_name == let.get_variable_name() and variable_value == let.get_variable_value():
-                    if let.get_type() == bool and isinstance(variable_value,bool) == False:
-                        print("{ RuntimeError: variable types don't mach (bool) }")
-                    else:
-                        pass
-                    if let.get_type() == int and isinstance(variable_value,int) == False:
-                        print("{ RuntimeError: variable types don't mach (int) }")
-                    else:
-                        pass
-                    if let.get_type() == str and isinstance(variable_value,str) == False:
-                        print("{ RuntimeError: variable types don't mach (str) }")
-                    else:
-                        pass
-            except Exception:
-                print("{ RuntimeError: expected expression. }")
-            
-            print("{ RuntimeValue: " + variable_name + " -> " + variable_value + " }")
-            print(variables)
-
-
-
-
 def const_creator():
     
     constants = {}  # Dictionary to store constants
@@ -574,7 +540,10 @@ def const_creator():
         
 
     const_declaration = f"const {name} = {{{','.join(values)}}};"
-    print("{ RuntimeValue: generated const:", const_declaration," }")
+    if verb == True:
+        print("{ RuntimeValue: generated const:", const_declaration," }")
+    else:
+        pass
 
     # Store constant in the dictionary
     constants[name] = values
@@ -588,8 +557,11 @@ def const_creator():
             print(f"  - {const_name} ({', '.join(const_values)})")
 
 
-
+# instances
 my_file = IOBase()
+
+
+
 
 
 
@@ -604,36 +576,52 @@ def main(inp):
         
         if nb == 1:
             inp = input("∙> ")
+            inp.replace("\n","")
+            if ";" not in inp:
+                print("{ RuntimeError: exected ';' at the end of line. }")
+                exit()
+            else:
+                pass
+            
         else:
             pass
         if not inp:
-            print("{ RuntimeValue: -> None }")
-            return 
-               
-        if inp == "#pragma once":
-            pass
-            
+            if verb == True:
+                print("{ RuntimeValue: -> None }")
+                return None
+            else:
+                pass
+
+        
 
         # Print the string and handle return statement
         elif inp.startswith("return"):
             inp = inp.replace("return", "")
             inp = inp.replace(";", "")
             inp = inp.replace('"',"")
+            inp = inp.replace('(',"")
+            inp = inp.replace(')',"")
             inp = inp.replace("'","")
-            print(ismath(inp))
-            
-            if ";" not in inp:
-                print("{ RuntimeError: exected ';' at the end of line. }")
+            if verb == True:
+                print("{ RuntimeValue: ",str(inp)," }")
+                return f"print({inp})"
             else:
-                print(" ",end="")
+                print(str(inp))
+            
             
             if '"' or "'" in inp:
-                    print("{ RuntimeValue: " + inp + " }")
+                if verb == True:
+                    print("{ RuntimeValue: " + str(inp) + " }")
+                else:
+                    print(str(inp))
             else:
                     
                 if '"' or "'" not in inp:
                     if inp in variables:
-                        print("{ RuntimeValue: " + variables[inp] + " }")
+                        if verb == True:
+                            print("{ RuntimeValue: " + variables[inp] + " }")
+                        else:
+                            pass
                 elif '"' or "'" in inp and inp in variables:
                     if rl == True:
                         print("{ RuntimeLine: a variable name was in quotes, did you mean the variable? }")
@@ -647,12 +635,18 @@ def main(inp):
                     inp = inp.replace(" ","")
                     
                     if '"' or "'" in inp:
-                        print("{ RuntimeValue: " + inp + " }")
+                        if verb == True:
+                            print("{ RuntimeValue: " + str(inp) + " }")
+                        else:
+                            print(str(inp))
                     else:
                         try:
                             expression_tree = parse_expression(inp)
                             result = evaluate_expression(expression_tree)
-                            print("{ RuntimeValue: "+str(inp)+" -> "+str(result)+" }")
+                            if verb == True:
+                                print("{ RuntimeValue: "+str(inp)+" -> "+str(result)+" }")
+                            else:
+                                pass
                         except (ValueError, TypeError) as e:
                             print("{ RuntimeError: "+str(e)+" }")
                 
@@ -660,44 +654,107 @@ def main(inp):
             inp = inp.replace(";", "")
             inp = inp.replace('"', "")
         
+        elif inp.startswith("typeface"):
+            inp = inp.replace("typeface", "")
+            inp = inp.replace(";", "")
+            inp = inp.replace('"',"")
+            inp = inp.replace('(',"")
+            inp = inp.replace(')',"")
+            inp = inp.replace("'","")
+            print(str(inp))
+            return f"print({inp})"
+            
+            
+            
+            if '"' or "'" in inp:
+                    print(str(inp))
+            else:
+                    
+                if '"' or "'" not in inp:
+                    if inp in variables:
+                        print(variables[inp])
+                elif '"' or "'" in inp and inp in variables:
+                    if rl == True:
+                        print("{ RuntimeLine: a variable name was in quotes, did you mean the variable? }")
+                    else:
+                        pass
+                elif "'" or '"' not in inp and inp not in variables:
+                    print("{ RuntimeError: '"+str(inp)+"' is not defined")
+                    
+                elif ismath(inp) == True:
+                    inp = inp.replace("typeface","")
+                    inp = inp.replace(" ","")
+                    
+                    if '"' or "'" in inp:
+                        print(str(inp))
+                    else:
+                        try:
+                            expression_tree = parse_expression(inp)
+                            result = evaluate_expression(expression_tree)
+                            print(str(result))
+                        except (ValueError, TypeError) as e:
+                            print("{ RuntimeError: "+str(e)+" }")
+                
+            
+            inp = inp.replace(";", "")
+            inp = inp.replace('"', "")
+        
+        elif inp.startswith("func"):
+            """
+            func main() {
+                // code here
+            }
+            """
+            parts = inp.strip().split()  # Split into meaningful parts
+            name = parts[1]
+            args_list = parts[2].split(",")  # Extract arguments
+            body = inp.split("{")[1].split("}")[0].strip()
+            functions[name] = [body.split(";")]
+            print("\n",dict)
 
         if ismath(inp) == True:        
             try:
                 expression_tree = parse_expression(inp)
                 result = evaluate_expression(expression_tree)
-                print("{ RuntimeValue: "+str(inp)+" -> "+str(result)+" }")
+                if verb == True:
+                    print("{ RuntimeValue: "+str(inp)+" -> "+str(result)+" }")
+                else:
+                    pass
             except (ValueError, TypeError) as e:
                 print("{ RuntimeError: "+str(e)+" }")
         
-        elif inp.startswith("promptSync"):
+        
+        elif "->" not in inp and inp.startswith("prompt"):
             try:
-                if "->" not in inp:
-                    inp = inp.replace("promptSync","")
-                    inp = inp.replace("(","")
-                    inp = inp.replace(")","")
-                    inp = inp.replace("'","")
-                    inp = inp.replace('"',"")
-                    inp = inp.replace(";","")
-                    input(inp)
-                elif "->" in inp:
-                    inp = inp.replace("promptSync","")
-                    inp = inp.replace("(","")
-                    inp = inp.replace(")","")
-                    inp = inp.replace(";","")
-                    inp = inp.replace("'","")
-                    inp = inp.replace('"',"")
-                    inp = inp.replace("->","")
-                    prompttokens = inp.split()
-                    prompttokens
-                    prompt = input(inp)
-                    variables[prompttokens[2]] = prompt
+                inp = inp.replace("prompt","")
+                inp = inp.replace("(","")
+                inp = inp.replace(")","")
+                inp = inp.replace("'","")
+                inp = inp.replace('"',"")
+                inp = inp.replace(";","")
+                input(inp)
+                return "input(inp)"
             except:
                 print("{ RuntimeError: expected expression. }")
+                
+        elif "->" in inp and inp.startswith("promptSync"):
+            try:
+                inp = inp.replace("promptSync","")
+                inp = inp.replace("(","")
+                inp = inp.replace(")","")
+                inp = inp.replace(";","")
+                inp = inp.replace("'","")
+                inp = inp.replace('"',"")
+                inp = inp.replace("->","")
+                prompttokens = inp.split()
+                prompt = input(inp)
+                variables[prompttokens[2]] = prompt
+                prvar = prompttokens[2]
+                return str(prvar)+" = input(inp)"
+            except:
+                print("{ RuntimeError: expected expression. }")
+        
         elif inp.startswith("var "):
-            if ";" not in inp:
-                print("{ RuntimeError: exected ';' at the end of line. }")
-            else:
-                pass
             parts = inp.split("->")
             if len(parts) != 2:
                 print("{ RuntimeError: invalid variable declaration syntax. Use 'var <variable_name> -> <value>;' }")
@@ -705,34 +762,80 @@ def main(inp):
                 variable_name = parts[0].strip().replace("var ", "")
                 variable_value = parts[1].strip().replace('"', "")
                 variable_value = parts[1].strip().replace(';', "")
-                if variable_name == letvar.get_variable_name() and variable_value == letvar.get_variable_value():
-                    if letvar.get_type() == bool and isinstance(variable_value,bool) == False:
-                        print("{ RuntimeError: variable types don't mach (bool) }")
+                if variable_name and variable_value in vartypes:
+                    if vartypes[variable_name] != "boolean":
+                        print("{ RuntimeError: variable types don't mach (boolean) }")
                     else:
                         pass
-                    if letvar.get_type() == int and isinstance(variable_value,int) == False:
-                        print("{ RuntimeError: variable types don't mach (int) }")
+                    if vartypes[variable_name] != "number":
+                        print("{ RuntimeError: variable types don't mach (number) }")
                     else:
                         pass
-                    if letvar.get_type() == str and isinstance(variable_value,str) == False:
-                        print("{ RuntimeError: variable types don't mach (str) }")
+                    if vartypes[variable_name] != "string":
+                        print("{ RuntimeError: variable types don't mach (string) }")
                     else:
                         pass
                 
                 g_variables[variable_name]=variable_value
                 
-                print("{ RuntimeValue: " + variable_name + " -> " + variable_value + " }")
+                if isinstance(inp,int):
+                    vartypes[variable_name] = "number"
+                if isinstance(inp,str):
+                    vartypes[variable_name] = "string"
+                if isinstance(inp,any):
+                    vartypes[variable_name] = "any"
+                if isinstance(inp,bool):
+                    vartypes[variable_name] = "boolean"
+                else:
+                    print("{ RuntimeError: type not avalable or type does not exist }")
+                
+                
+                
+                if verb == True:
+                    print("{ RuntimeValue: " + str(variable_name) + " -> " + str(variable_value) + " }")
+                else:
+                    pass
                 print(g_variables)
+                return str(variable_name)+" = "+str(variable_value)
         
-        elif inp.startswith("let "):
-            letvar = let()
-            letvar.create()
+        elif inp.startswith("let"):
+            dinp = inp.replace("let ","")
+            dinp = inp.replace(":","")
+            dinp = inp.replace("->","")
+            parts = inp.split(" ")
+            "i,number"
+            ditems = str(types.items())
+            ditems = ditems.replace("[","")
+            ditems = ditems.replace("]","")
+            ditems = ditems.replace("(","")
+            ditems = ditems.replace(")","")
+            ditems = ditems.replace("'","")
+            ditems = ditems.replace(",","")
+            
+            if ditems not in dinp:
+                variables[parts[0]] = parts[1]
+            else:
+                vartypes[parts[0]] = parts[1]
+                print(vartypes)
+            
+            
+            
         
         elif inp.startswith("type"):
             inp = inp.replace("type","")
             inp = inp.replace("->","")
-            typename,typevalue = inp.split()
+            inp.replace("  "," ")
+            typename,typevalue = inp.split(" ")
+            if "|" in inp:
+                typeparts = typevalue.split("|")
+                types[typename] = [typeparts]
             types[typename] = typevalue
+            if verb == True:
+                print("{ RuntimeValue: new type: '"+str(typename)+"' -> "+str(typevalue)+" }")
+            else:
+                pass
+            
+            return str(typename)+" = "+str(typevalue)
             
         elif inp.lower().startswith == "while (true)":
             try:
@@ -740,10 +843,16 @@ def main(inp):
                 inp = inp.replace(" ","")
                 inp = inp.replace("{","")
                 inp = inp.replace("}","")
+                
+                return """while True:
+                main(inp)"""
+                
+                while True:
+                    main(inp)
+                    
             except Exception:
                 print("{ RuntimeError: expected expression }")
-            while True:
-                main(inp)
+            
         
         elif inp.lower().startswith == "while":
             try:
@@ -757,6 +866,8 @@ def main(inp):
                 cond = wh[1]
                 val = wh[2]
 
+                return """while cond:
+                    main(val)"""
                 while cond:
                     main(val)
             except:
@@ -774,6 +885,9 @@ def main(inp):
                 cond = wh[1]
                 val = wh[2]
 
+                return """if cond:
+                    main(val)"""
+                    
                 if cond:
                     main(val)
                     
@@ -788,8 +902,12 @@ def main(inp):
                 inp = inp.replace(" ","")
                 inp = inp.replace("{","")
                 inp = inp.replace("}","")
+                return """while True:
+                main(inp)"""
+                
                 while True:
                     main(inp)
+                    
             except Exception:
                 print("{ RuntimeError: expected expression }")
             
@@ -797,12 +915,14 @@ def main(inp):
         elif inp.lower().startswith == "!":
             inp = inp.replace("!","")
             os.system(inp)
+            return "os.system(inp)"
             
         
         elif "const" in inp:
+            return const_creator()
             const_creator()
-        
         elif "interface" in inp:
+            return intr()
             intr()
         
         elif "export" in inp:
@@ -810,15 +930,21 @@ def main(inp):
             if len(parts) != 2:
                 print("{ RuntimeError: invalid export format. Please follow 'export: (<name>,<value>)' }")
             name, value = parts
+            return export(name.strip(), value.strip())
             export(name.strip(), value.strip())
         
             
         elif inp.startswith("//"):
+            inp.replace("//")
             pass
+            return f"#{inp}"
             
         if inp.startswith == "source -> <_ioSource>":
             io = 1
-            print("{ RuntimeValue: input-output library imported }")
+            if md == True:
+                print("{ RuntimeValue: input-output library imported }")
+            else:
+                pass
             
         if "source ->" in inp and ".rh" in inp:
             inp.replace("source ->","")
@@ -838,9 +964,9 @@ def main(inp):
         
                     
         
-        if inp.startswith == "import * as <_ioSource>":
+        if inp.startswith == "import * as _ioSource from <_ioSource>":
             io = 1
-            print("{ RuntimeDV: input-output library imported }")
+            print("{ ModuleRV: input-output library imported }")
             
         elif io == 1:
             if inp.startswith == "_io.TextIOWrapper":
@@ -854,6 +980,8 @@ def main(inp):
                 if operation.lower() == "read":
                     try:
                         wrapper = TextWrapper(filepath)
+                        return """for line in wrapper:
+                            print(line)"""
                         for line in wrapper:
                             print(line)
                     except FileNotFoundError:
@@ -861,15 +989,23 @@ def main(inp):
                 elif operation.lower() == "write":
                     if len(parts) == 4:  # Check if new data is provided
                         data_to_write = parts[2].strip()  # Extract data from command
+                        return "data_to_write = parts[2].strip()"
                     try:
                         wrapper = TextWrapper(filepath)
                         wrapper.write(data_to_write + "\n")  # Add newline for clarity
-                        print("{ RuntimeValue: Data written to '"+str(filepath)+"'. }")
+                        return '_io.TextIOWrapper.write(data_to_write + "\n")'
+                        if verb == True:
+                            print("{ RuntimeValue: Data written to '"+str(filepath)+"'. }")
+                        else:
+                            pass
                     except FileNotFoundError:
                         print(f"error: File '"+str(filepath)+"' not found. Creating a new file.")
                         wrapper = TextWrapper(filepath)
                         wrapper.write(data_to_write + "\n")
-                        print("{ RuntimeValue: Data written to new file -> '"+str(filepath)+"'. }")
+                        if verb == True:
+                            print("{ RuntimeValue: Data written to new file -> '"+str(filepath)+"'. }")
+                        else:
+                            pass
                  
                 elif operation.lower() == "wb":
                     if len(parts) == 4:  # Check if new data is provided
@@ -877,13 +1013,18 @@ def main(inp):
                     try:
                         wrapper = TextWrapper(filepath)
                         wrapper.writebin(data_to_write + "\n")  # Add newline for clarity
-                        print("{ RuntimeValue: binary Data written to '"+str(filepath)+"'. }")
+                        if verb == True:
+                            print("{ RuntimeValue: binary Data written to '"+str(filepath)+"'. }")
+                        else:
+                            pass
                     except FileNotFoundError:
                         print(f"error: File '"+str(filepath)+"' not found. Creating a new file.")
                         wrapper = TextWrapper(filepath)
                         wrapper.write(data_to_write + "\n")
-                        print("{ RuntimeValue: binary Data written to new file -> '"+str(filepath)+"'. }")
-
+                        if verb == True:
+                            print("{ RuntimeValue: binary Data written to new file -> '"+str(filepath)+"'. }")
+                        else:
+                            pass
                        
                 elif operation.lower() == "rb":
                     try:
@@ -894,11 +1035,12 @@ def main(inp):
                 else:
                     print("{ RuntimeError: Unsupported operation. Currently only 'read','rb','write' and 'wb' are supported. }")
                 
-        elif io == 1:
-            if inp.lower().startswith("_io.namespace"):
-                result = handle_input(inp)
-                if result:
-                    print(result)
+
+        if inp.lower().startswith("namespace"):
+            result = handle_input(inp)
+            if result:
+                print(result)
+                
         elif io == 1:
             if inp.lower().startswith("_io.BytesIO"):
                 inp = inp.replace(")","")
@@ -920,12 +1062,13 @@ def main(inp):
                     Bio.close()
                 Bio = BytesIO()
                 bio(inp)
-                
-            "_io.BytesIO(_io.TextIOWrapper(wb | ./text.txt | 'ruffle wrote this!')[0:10] )"
-                
+                                
         elif any(op in inp for op in ["==", "!=", ">", "<","<=", ">="]):
             result = compare_expression(inp)
-            print("{ RuntimeValue: "+str(inp)+" -> "+str(result)+" }")
+            if verb == True:
+                print("{ RuntimeValue: "+str(inp)+" -> "+str(result)+" }")
+            else:
+                pass
             
                     
         
@@ -944,17 +1087,21 @@ def main(inp):
             os.system('cls' if os.name == 'nt' else 'clear')
             print("RuffleScript Notebook ")
             print("\nType `help();` for more information")
-            
+           
+         
         elif inp == "help();":
-            print("\nRuffleScript Commands")
-            print("----------------------\n")
+            print("\nRuffleScript Command handbook")
+            print("-----------------------------\n")
             print("source  -  command to import modules (eg. source -> <_ioSource> )")
             print("var  -  creates variable usable in the program (eg. var myvar -> 'variable text')")
+            print("typeface  -  prints plain text (non verbose) to the screen (eg. typeface('ruffle wrote this!') )")
             print("return  -  returns input given (eg. return 'text here')")
             print("for(;;){-}  -  creates a forever loop (eg. for(;;) {retrun 'forever!'} )")
             print("while  -  while loop for program (eg. while (true) {retrun 'heh'} )")
+            print("namespaces  -  can create namespaces in your program that are accesable using the command (eg. namespaces(rufflespace) | write('ruffle wrote this!') )")
             print("if  -  creates an if loop fo the program to read (eg. if (1==1) {return 'heh'})")
-            print("promptSync  -  asks a prompt in the program (eg. promptSync('how old are you?: ') )")
+            print("promptSync  -  asks a prompt in the program (eg. var inp -> promptSync('how old are you?: ') )")
+            print("prompt  -  asks for a prompt (does not support variables) (eg. prompt('hello! ') )")
             print("interface  -  makes an interface containing let blocks (eg. interface ruffle {let i: 3; let h: 4})")
             print("exit();  -  exits program (eg. exit(); )")
             print("clear();  -  clears the terminal, freeing space (eg. clear(); )")
@@ -962,7 +1109,6 @@ def main(inp):
             print("\n_ioSource Commands - (can only be used if _ioSource is imported)")
             print("-----------------------------------------------------------------\n")
             print("_io.TextIOWrapper  -  can acess and edit files (eg. _io.TextIOWrapper(write | ./text.txt | 'ruffle wrote this!'))")
-            print("_io.namespaces  -  can create namespaces in your program that are accesable using the command (eg. _io.namespaces(rufflespace) | write('ruffle wrote this!') )")
             print("_io.IOBase  -  can write lines to the buffer and get their value (eg. _io.IOBase.write('ruffle wrote this!')  -  _io.IOBase.read() )")
             print("_io.BytesIO  -  gets binary data (eg. _io.BytesIO(_io.TextIOWrapper(wb | ./text.txt | 'ruffle wrote this!')[0:10] ) )")
             print("\n")
@@ -983,11 +1129,16 @@ def main(inp):
         print("\n{ KeyboardInterrupt: "+str(e)+" }")
         exit(0)
     except SyntaxError as e:
-        print("{ RuntimeError: invalid syntax '"+str(e)+"' }")
+        print("{ RuntimeError: invalid syntax'"+str(e)+"' }")
     except SystemError as e:
-        print(f"{"{"} system error: {e} {"}"}")
+        print(f"{bbr} system error: {e} {br}")
     except MemoryError:
         print("{ RamError: Cannot allocate memory }")
+    except RuntimeError as e:
+        print(f"{bbr} {Runtime_error}: {e} {br}")
+    except EnvironmentError as e:
+        print("{ EnvironmentError: "+str(e)+" }")
+    
         
 def mainf(inp):
     main(inp)
@@ -995,7 +1146,7 @@ if __name__ == "__main__":
     
     # file interpreter
     if len(sys.argv) > 1:
-        if sys.argv[1] != "--cmd":
+        if sys.argv[1] == "":
             nb = 0
             file = sys.argv[1]
             with open(file,"r") as f:
@@ -1003,32 +1154,42 @@ if __name__ == "__main__":
                 tcom = info.split(" ")
             for item in tcom:
                 mainf(item)
+        if sys.argv[1] == "--init":
+            f = open("rsconfig.json","w")
+            f.write("""{
+    "RuntimeLineSuggestion": "on", // on|off
+    "moduleRuntimeValue": "off", // on|off
+    "verbose": "false" // true|false
+}""")
+            print("Created 'rsconfig.json' file.")
                 
-    elif len(sys.argv) > 1 and sys.argv[1] == "--cmd":
-        
-        print("""
+    elif len(sys.argv) > 1 and sys.argv[1] == "--about":
+        print("""\n
               
 **********************************************************************
-** Rufflescript Developer Console v1.6
+** Rufflescript Developer Notebook & enviroment (v1.6)
 ** using .REL architecture - [Runtime . Evaluation . Language]
 **********************************************************************
 
 """)
-        nb = 1
-        os.system('cls' if os.name == 'nt' else 'clear')
-        while True:
-            main(inp)
 
+    elif sys.argv[1] == "--update":
+         if platform.system == 'Windows':
+              os.system('del "RuffleScript.py"')
+         else:
+              os.system("sudo rm -rf RuffleScript.py")
+          os.system("cd /")
+          os.system("git clone https://github.com/PuppyStudios1/RuffleScript.git")
+         
     # else, rufflescript notebook
     else:
         nb = 1
         os.system('cls' if os.name == 'nt' else 'clear')
         print(logo)
-        print("RuffleScript Notebook ")
+        print("RuffleScript Notebook")
         print("\nType `help();` for more information")
         
         while True:
             main(inp)
             
             
-

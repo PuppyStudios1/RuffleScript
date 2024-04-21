@@ -49,8 +49,9 @@ namespaces = {}
 types = {"bool":"bool","number":"number","string":"string","any":"any","null":"null"}
 
 inp = ""
-runtime_value = "{ RuntimeValue:"
-Runtime_error = "{ RuntimeError:"
+runtime_value = " RuntimeValue:"
+Runtime_error = " RuntimeError:"
+runtime_log = " RuntimeLog:"
 br = "}"
 bbr = "{"
 
@@ -312,8 +313,8 @@ class Interface:
 
   def __str__(self):
     if not variables:
-      return f"{"{ RuntimeLog:"} interface {self.name} has no variables set. {"}"}"
-    return f"{"{ RuntimeLog:"} interface {self.name}:\n" + "\n".join(f"{key}: {value}" for key, value in variables.items()+f"{"}"}")
+      return f"{bbr}{runtime_log} interface {self.name} has no variables set. {br}"
+    return f"{bbr}{runtime_log} interface {self.name}:\n" + "\n".join(f"{key}: {value}" for key, value in variables.items()+f"{br}")
 
 
 
